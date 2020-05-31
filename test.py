@@ -1,99 +1,74 @@
+import os, sys
 import pyautogui as gui
+import webbrowser
+import time
+import cv2
+import numpy as np
 import mouse
 import keyboard
-import time
-import threading
-from queue import Queue
-from collections import namedtuple
-from mouse._mouse_event import ButtonEvent, MoveEvent, WheelEvent, UP
-from keyboard._keyboard_event import KEY_DOWN
 
-Event = namedtuple('Event', ['type', 'event'])
-stop_thread = False
+MAX_DELAY = 15 # Seconds
 
-def merge(mouse_events_queue, keyboard_events_queue):
-    """
-    Merge recorded mouse and keyboard events into one queue based on recorded time.
-    """
-    events_queue = Queue()
-    mouse_event = None
-    keyboard_event = None
-    while mouse_events_queue.qsize() != 0 or keyboard_events_queue.qsize() != 0:
-        if mouse_event == None and mouse_events_queue.qsize() != 0:
-            mouse_event = mouse_events_queue.get()
-        if keyboard_event == None and keyboard_events_queue.qsize() != 0:
-            keyboard_event = keyboard_events_queue.get()
-
-        if mouse_event and (not keyboard_event or mouse_event.time <= keyboard_event.time):
-            events_queue.put(Event('mouse', mouse_event))
-            mouse_event = None
-            mouse_events_queue.task_done()
-        elif keyboard_event and (not mouse_event or keyboard_event.time < mouse_event.time):
-            events_queue.put(Event('keyboard', keyboard_event))
-            keyboard_event = None
-            keyboard_events_queue.task_done()
-    return events_queue
+def init():
+    # Throw exception if mouse is at top left corner
+    gui.FAILSAFE = True
+    # Change CWD to this file's directory
+    os.chdir(sys.path[0])
+    size = gui.size()
+    return size
 
 
-def play(events, speed_factor=1.0, include_clicks=True, include_moves=True, include_wheel=True):
-    """
-    Plays both the mouse and keyboard events back.
-    """
-    print("Playing recorded events...")
-    last_time = None
-    for event_type, event in events:
-        if stop_thread:
-            return
-        if speed_factor > 0 and last_time is not None:
-            time.sleep((event.time - last_time) / speed_factor)
-        last_time = event.time
-
-        if event_type == 'mouse':
-            if isinstance(event, ButtonEvent) and include_clicks:
-                if event.event_type == UP:
-                    mouse.release(event.button)
-                else:
-                    mouse.press(event.button)
-            elif isinstance(event, MoveEvent) and include_moves:
-                mouse.move(event.x, event.y)
-            elif isinstance(event, WheelEvent) and include_wheel:
-                mouse.wheel(event.delta)
-        elif event_type == 'keyboard':
-            state = keyboard.stash_state()
-            key = event.name or event.scan_code
-            keyboard.press(key) if event.event_type == KEY_DOWN else keyboard.release(key)
-            keyboard.restore_modifiers(state)
-        else:
-            raise Exception("Incorrect type of event")
+def check_timeout(start_time):
+    if time.time() - start_time > MAX_DELAY:
+        print("Request timed out")
+        sys.exit(1)
 
 
-def interrupt(interrupt_key):
-    keyboard.wait(interrupt_key)
-    global stop_thread
-    stop_thread = True
-    print("Play back cancelled!")
+def open_axess(screen_resolution):
+    width, height = screen_resolution
+    img_dir = os.path.join(os.getcwd(), "images/axess/")
+
+    urL = "axess.stanford.edu"
+    chrome_path = "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
+    webbrowser.register("chrome", None, webbrowser.BackgroundBrowser(chrome_path), 1)
+    webbrowser.get("chrome").open(urL)
+    time.sleep(3)
+
+    # Attempt to login
+    # login_loc = None
+    # region = (0, 0, width, height)
+    # start_time = time.time()
+    # while not login_loc:
+    #     check_timeout(start_time)
+    #     start = time.time()
+    #     login_loc = gui.locateOnScreen(img_dir + "login.png", region=region, grayscale=True, confidence=0.6)
+    #     print(time.time() - start)
+    # gui.moveTo(*login_loc[:2])
+    # gui.click()
+    # time.sleep(2)
+
+    img = gui.screenshot()
+    img = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    cv2.imshow("grey", img)
+    template = cv2.imread(img_dir + "login.png",0)
+    w, h = template.shape[::-1]
+
+    res = cv2.matchTemplate(img,template,cv2.TM_CCOEFF_NORMED)
+    print(res)
+    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+    top_left = max_loc
+    bottom_right = (top_left[0] + w, top_left[1] + h)
+    cv2.rectangle(img, top_left, bottom_right, 255, 2)
+
+
+    cv2.imshow("result", img)
+    cv2.waitKey(0)
 
 
 def main():
-    mouse_events_queue = Queue()
-    keyboard_events_queue = Queue()
-
-    mouse.hook(mouse_events_queue.put)
-    keyboard.start_recording(keyboard_events_queue)
-    print("Recoding until esc is pressed...")
-    keyboard.wait("esc")
-    mouse.unhook(mouse_events_queue.put)
-    keyboard.stop_recording()
-
-    events_queue = merge(mouse_events_queue, keyboard_events_queue)
-
-    play_thread = threading.Thread(target=play, args=(list(events_queue.queue),))
-    interrupt_thread = threading.Thread(target=interrupt, args=("esc",))
-    interrupt_thread.daemon = True
-    interrupt_thread.start()
-    play_thread.start()
-    play_thread.join()
-    print("Program Finished!")
+    screen_resolution = init()
+    open_axess(screen_resolution)
 
 
 if __name__ == '__main__':
