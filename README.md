@@ -2,7 +2,7 @@
 
 This script allows you to record your key strokes and key presses and playback the events on demand.
 
-This code should work on Windows 10, Mac, and Linux. However it was only tested on Windows10.
+This code should work on Windows 10, Mac, and Linux. However it was only tested on Windows10 and Ubuntu 21.04.
 
 ## Setup
 
@@ -29,6 +29,10 @@ pip install virtualenv
 virtualenv env -p python3
 .\env\Scripts\activate.bat
 ```
+
+### Setup for Linux
+
+If you receive an error about the display, run `xhost +SI:localuser:root`
 
 ### Setup for WSL (CANCELLED):
 
