@@ -121,6 +121,7 @@ class Recorder:
         This thread will stop the playback if stop_thread == True
         """
         last_time = None
+        state = keyboard.stash_state()
         for event_type, event in events:
             if self.stop_thread:
                 return
@@ -131,20 +132,20 @@ class Recorder:
             if event_type == 'mouse':
                 if isinstance(event, ButtonEvent) and include_clicks:
                     if event.event_type == UP:
-                        mouse.release(event.button)
+                        gui.mouseUp(button=event.button)
                     else:
-                        mouse.press(event.button)
+                        gui.mouseDown(button=event.button)
                 elif isinstance(event, MoveEvent) and include_moves:
                     mouse.move(event.x, event.y)
                 elif isinstance(event, WheelEvent) and include_wheel:
                     mouse.wheel(event.delta)
             elif event_type == 'keyboard':
-                state = keyboard.stash_state()
                 key = event.name or event.scan_code
                 keyboard.press(key) if event.event_type == KEY_DOWN else keyboard.release(key)
-                keyboard.restore_modifiers(state)
             else:
                 raise Exception("Incorrect type of event")
+        keyboard.restore_modifiers(state)
+        
 
     def _thread_interrupt(self, escape_key):
         keyboard.wait(escape_key)
