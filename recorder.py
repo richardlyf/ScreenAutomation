@@ -27,7 +27,7 @@ class Recorder:
         self.mouse_events_queue = Queue()
         self.keyboard_events_queue = Queue()
         self.events = None
-        self.stop_thread = False
+        self.stop_replay = False
 
 
     def record(self, escape_key="esc"):
@@ -36,6 +36,7 @@ class Recorder:
         Pressing the escape_key stops the recording.
         Returns the recorded events.
         """
+        self.stop_replay = False
         mouse.hook(self.mouse_events_queue.put)
         keyboard.start_recording(self.keyboard_events_queue)
         print("Recoding until esc is pressed...")
@@ -66,8 +67,9 @@ class Recorder:
         if self.events == None:
             return
 
-        play_thread = threading.Thread(target=self._thread_play, args=(self.events,))
-        interrupt_thread = threading.Thread(target=self._thread_interrupt, args=(escape_key,))
+        cv = threading.Event()
+        play_thread = threading.Thread(target=self._thread_play, args=(cv, self.events,))
+        interrupt_thread = threading.Thread(target=self._thread_interrupt, args=(cv, escape_key,))
         interrupt_thread.daemon = True
         print("Playing recorded events...")
         interrupt_thread.start()
@@ -115,15 +117,19 @@ class Recorder:
         return events_queue
 
 
-    def _thread_play(self, events, speed_factor=1.0, include_clicks=True, include_moves=True, include_wheel=True):
+    def _thread_play(self, cv, events, speed_factor=1.0, include_clicks=True, include_moves=True, include_wheel=True):
         """
         Thread that plays both the mouse and keyboard events back.
-        This thread will stop the playback if stop_thread == True
+        This thread will stop the playback if stop_replay == True
         """
         last_time = None
         state = keyboard.stash_state()
+        # Exclude first enter release and last esc press
+        events = events[1:-1]
         for event_type, event in events:
-            if self.stop_thread:
+            # Awaken interrupt thread to check for exit status
+            cv.set()
+            if self.stop_replay:
                 return
             if speed_factor > 0 and last_time is not None:
                 time.sleep((event.time - last_time) / speed_factor)
@@ -147,9 +153,13 @@ class Recorder:
         keyboard.restore_modifiers(state)
         
 
-    def _thread_interrupt(self, escape_key):
-        keyboard.wait(escape_key)
-        self.stop_thread = True
-        print("Play back cancelled!")
+    def _thread_interrupt(self, cv, escape_key):
+        while True:
+            cv.wait()
+            cv.clear()
+            if keyboard.is_pressed(escape_key):
+                self.stop_replay = True
+                print("Play back cancelled!")
+                break
 
 
