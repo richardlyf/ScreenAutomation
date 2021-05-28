@@ -124,8 +124,6 @@ class Recorder:
         """
         last_time = None
         state = keyboard.stash_state()
-        # Exclude first enter release and last esc press
-        events = events[:-1]
         for event_type, event in events:
             # Awaken interrupt thread to check for exit status
             cv.set()
