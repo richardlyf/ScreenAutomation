@@ -124,13 +124,20 @@ class Recorder:
         """
         last_time = None
         state = keyboard.stash_state()
+        start = time.time()
+        total_wait_time = 0
         for event_type, event in events:
             # Awaken interrupt thread to check for exit status
             cv.set()
             if self.stop_replay:
                 return
             if speed_factor > 0 and last_time is not None:
-                time.sleep((event.time - last_time) / speed_factor)
+                wait_time = (event.time - last_time) / speed_factor
+                # Compensate for delays in execution
+                # Compare actual time taken to time we should have waited for and compensate
+                delay = (time.time() - start) - total_wait_time
+                time.sleep(max(0, wait_time - delay))
+                total_wait_time += wait_time
             last_time = event.time
 
             if event_type == 'mouse':
@@ -149,7 +156,7 @@ class Recorder:
             else:
                 raise Exception("Incorrect type of event")
         keyboard.restore_modifiers(state)
-        
+
 
     def _thread_interrupt(self, cv, escape_key):
         while True:
